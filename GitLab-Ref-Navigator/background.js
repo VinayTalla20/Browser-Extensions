@@ -1,0 +1,1 @@
+// background.js - Service worker placeholder for ColorSwap extension
