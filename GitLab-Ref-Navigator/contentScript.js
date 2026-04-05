@@ -85,13 +85,15 @@ function getCurrentRepoInfo() {
 
 function makeIncludesClickable() {
   const codeLines = Array.from(document.querySelectorAll('div.line[lang="yaml"], div.line[id^="LC"]'));
-  console.log(`[GitLab RefLinks] Found ${codeLines.length} code lines (div.line)`);
 
-  if (!codeLines.length) return false;
+  if (!codeLines.length) return { found: false, linked: 0, lines: 0 };
+
+  // Check if any line contains "include:"
+  const hasInclude = codeLines.some(line => /^\s*include:\s*$/.test(line.textContent));
+  if (!hasInclude) return { found: true, linked: 0, lines: codeLines.length };
 
   // Get current repo info for simple includes (files in same repo)
   const currentRepo = getCurrentRepoInfo();
-  console.log('[GitLab RefLinks] Current repo:', currentRepo);
 
   // First pass: collect YAML anchors (&anchor_name value)
   const anchors = {};
@@ -107,14 +109,14 @@ function makeIncludesClickable() {
   // Second pass: process include blocks
   let currentProject = null;
   let currentRef = null;
-  let inFileList = false;       // inside a file: list (under project/ref)
-  let inSimpleInclude = false;  // inside a simple include list (just file names)
-  let inIncludeBlock = false;   // we've seen "include:"
+  let inFileList = false;
+  let inSimpleInclude = false;
+  let inIncludeBlock = false;
+  let linkedCount = 0;
 
   codeLines.forEach((line) => {
     const text = line.textContent;
 
-    // Detect "include:" line
     if (/^\s*include:\s*$/.test(text)) {
       inIncludeBlock = true;
       inSimpleInclude = true;
@@ -140,6 +142,7 @@ function makeIncludesClickable() {
     const localMatch = text.match(/local:\s*["']?([^\s"']+\.ya?ml)["']?/);
     if (localMatch && currentRepo) {
       linkFileName(line, localMatch[1], currentRepo.project, currentRepo.ref);
+      linkedCount++;
       return;
     }
 
@@ -179,6 +182,7 @@ function makeIncludesClickable() {
     if (fileSingleMatch && currentProject && currentRef) {
       inFileList = false;
       linkFileName(line, fileSingleMatch[1], currentProject, currentRef);
+      linkedCount++;
       return;
     } else if (fileListStart) {
       inFileList = true;
@@ -191,17 +195,18 @@ function makeIncludesClickable() {
     const fileListItem = text.match(/^\s*-\s+["']?([^\s"']+\.ya?ml)["']?/);
 
     if (inFileList && fileListItem && currentProject && currentRef) {
-      // List item under file: (with project/ref)
       linkFileName(line, fileListItem[1], currentProject, currentRef);
+      linkedCount++;
     } else if (inSimpleInclude && fileListItem && currentRepo) {
-      // Simple include list item (same repo/branch)
       linkFileName(line, fileListItem[1], currentRepo.project, currentRepo.ref);
+      linkedCount++;
     } else if (inFileList && !fileListItem && !/^\s*$/.test(text) && !/^\s*-/.test(text)) {
       inFileList = false;
     }
   });
 
-  return true;
+  console.log(`[GitLab RefLinks] Found ${codeLines.length} lines, linked ${linkedCount} files`);
+  return { found: true, linked: linkedCount, lines: codeLines.length };
 }
 
 function linkFileName(line, fileName, project, ref) {
@@ -240,26 +245,47 @@ function waitForCodeAndRun() {
   if (!isGitlabYamlPage()) return;
 
   // Try immediately
-  if (makeIncludesClickable()) return;
+  const result = makeIncludesClickable();
+  if (result.found && result.linked > 0) return;
 
-  // If code block not yet loaded, observe DOM changes
-  console.log('[GitLab RefLinks] Code block not found yet, waiting...');
+  // If code block not yet loaded or includes not yet rendered, observe DOM changes
+  console.log('[GitLab RefLinks] Waiting for code block and include entries...');
   let timeoutId = null;
+  let debounceId = null;
+  let lastLineCount = result.lines || 0;
 
   const observer = new MutationObserver((mutations, obs) => {
-    if (makeIncludesClickable()) {
-      console.log('[GitLab RefLinks] Code block found after waiting');
-      obs.disconnect();
-      if (timeoutId) clearTimeout(timeoutId);
-    }
+    // Debounce: wait 500ms after last DOM change before processing
+    if (debounceId) clearTimeout(debounceId);
+    debounceId = setTimeout(() => {
+      const r = makeIncludesClickable();
+      if (r.found && r.linked > 0) {
+        console.log(`[GitLab RefLinks] Done! Linked ${r.linked} files`);
+        obs.disconnect();
+        if (timeoutId) clearTimeout(timeoutId);
+      } else if (r.lines === lastLineCount && r.lines > 0) {
+        // DOM has stabilized (no new lines) but no includes found — stop
+        console.log(`[GitLab RefLinks] Code block loaded (${r.lines} lines) but no linkable includes found`);
+        obs.disconnect();
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+      lastLineCount = r.lines;
+    }, 500);
   });
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // Safety timeout: stop observing after 15 seconds
+  // Safety timeout: stop observing after 30 seconds
   timeoutId = setTimeout(() => {
     observer.disconnect();
-    console.log('[GitLab RefLinks] Timed out waiting for code block');
-  }, 15000);
+    if (debounceId) clearTimeout(debounceId);
+    // One final attempt
+    const finalResult = makeIncludesClickable();
+    if (finalResult.linked > 0) {
+      console.log(`[GitLab RefLinks] Final attempt: linked ${finalResult.linked} files`);
+    } else {
+      console.log(`[GitLab RefLinks] Timed out (${finalResult.lines} lines, ${finalResult.linked} linked)`);
+    }
+  }, 30000);
 }
 
 waitForCodeAndRun();
