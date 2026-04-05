@@ -288,4 +288,24 @@ function waitForCodeAndRun() {
   }, 30000);
 }
 
+// Run on initial page load
 waitForCodeAndRun();
+
+// Re-run on client-side navigation (GitLab uses Turbo/PJAX)
+let lastUrl = window.location.href;
+
+const urlObserver = new MutationObserver(() => {
+  if (window.location.href !== lastUrl) {
+    lastUrl = window.location.href;
+    console.log('[GitLab RefLinks] URL changed, re-running...');
+    // Small delay to let GitLab render the new page content
+    setTimeout(() => waitForCodeAndRun(), 1000);
+  }
+});
+urlObserver.observe(document.body, { childList: true, subtree: true });
+
+// Also listen for popstate (browser back/forward)
+window.addEventListener('popstate', () => {
+  console.log('[GitLab RefLinks] popstate detected, re-running...');
+  setTimeout(() => waitForCodeAndRun(), 1000);
+});
