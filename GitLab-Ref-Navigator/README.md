@@ -25,6 +25,8 @@ No more copy-pasting project paths and hunting for files — just **click and na
 | 🌿 **Branch-aware** | Correctly handles refs with `/` (e.g., `rc/0.2454.0`, `feature/my-branch`) |
 | 📝 **Unquoted values** | Supports `project: myorg/repo` without quotes |
 | ⏳ **Lazy-load support** | Waits for GitLab's code block to render before processing |
+| 🔄 **SPA navigation** | Auto-detects page changes without needing a manual reload |
+| 📄 **Large file support** | Debounced observer handles files with `include:` at the bottom |
 
 ---
 
@@ -121,6 +123,7 @@ include:
 │     • local: 'path/to/file.yml'                         │
 │     • - 'simple_include.yml'                            │
 │  5. Wraps file names in <a> tags with correct URLs      │
+│  6. Watches for SPA navigation & re-runs automatically  │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -141,7 +144,8 @@ The core logic, broken into these functions:
 | `getCurrentRepoInfo()` | Extracts the current project path and branch/tag from the page URL and DOM |
 | `makeIncludesClickable()` | Parses YAML lines, resolves anchors, and identifies `include` entries |
 | `linkFileName()` | Wraps a file name in a clickable `<a>` tag pointing to the correct GitLab URL |
-| `waitForCodeAndRun()` | Uses `MutationObserver` to wait for lazy-loaded code blocks |
+| `waitForCodeAndRun()` | Uses `MutationObserver` with debounce to wait for lazy-loaded code blocks |
+| URL change detection | Watches for SPA navigation (Turbo/PJAX) and `popstate` events to re-run automatically |
 
 ---
 
@@ -202,6 +206,8 @@ To support a new `include` pattern (e.g., `template:`), follow these steps:
 | **No `popup.html`** | The extension works automatically — no user interaction required |
 | **No dependencies** | Pure vanilla JS keeps the extension lightweight and fast |
 | **`MutationObserver`** | GitLab lazy-loads code blocks via JavaScript; we must wait for the DOM to update |
+| **Debounced processing** | Prevents excessive re-runs on large files; waits for DOM to stabilize |
+| **URL change detection** | GitLab uses Turbo/PJAX for SPA navigation; we watch for URL changes to re-run |
 | **Content script only** | Simplest architecture — one file does everything |
 | **`document_idle`** | Runs after the page has finished loading, reducing interference with GitLab's own scripts |
 
@@ -236,9 +242,10 @@ To support self-hosted GitLab instances, you would need to:
 4. Open **DevTools → Console** to see debug logs:
    ```
    [GitLab RefLinks] contentScript.js loaded
-   [GitLab RefLinks] Found 23 code lines (div.line)
-   [GitLab RefLinks] Anchors found: { modules_version: "rc/0.2454.0", ... }
+   [GitLab RefLinks] Found 23 lines, linked 3 files
    [GitLab RefLinks] Linked: common.yml → https://gitlab.com/.../common.yml
+   [GitLab RefLinks] Done! Linked 3 files
+   [GitLab RefLinks] URL changed, re-running...
    ```
 
 ---
@@ -261,6 +268,8 @@ To support self-hosted GitLab instances, you would need to:
 - [x] File lists under `file:`
 - [x] Branch names with `/` (e.g., `feature/my-branch`, `rc/0.2454.0`)
 - [x] Unquoted / single-quoted / double-quoted values
+- [x] SPA navigation support (no manual reload needed)
+- [x] Large file support with debounced observer
 - [ ] Support for `template:` includes
 - [ ] Icon and branding
 - [ ] Chrome Web Store / Firefox Add-ons publishing
