@@ -14,29 +14,67 @@ function getCurrentRepoInfo() {
   // Extract project and ref from the current page URL
   // URL format: https://gitlab.com/<project>/-/blob/<ref>/<filepath>
   // Ref can contain "/" (e.g., rc/0.2454.0, feature/my-branch)
-  // Strategy: find the file name from the page, then extract ref as everything between blob/ and /<filename>
   const path = window.location.pathname;
   const blobMatch = path.match(/^\/(.+?)\/-\/blob\/(.+)$/);
   if (!blobMatch) return null;
 
   const project = blobMatch[1];
-  const refAndFile = blobMatch[2]; // e.g., "rc/0.2454.0/common.yml"
+  const refAndFile = blobMatch[2]; // e.g., "feature/keyvault-module/pipelines/common.yml"
 
-  // The file name is the last segment that matches a file (contains a dot)
-  // Find the actual file name from the page title or breadcrumb
+  // Strategy 1: Read the branch/tag from GitLab's ref selector dropdown
+  // Try multiple selectors to find the branch switcher
+  const refSelectors = [
+    '[data-testid="branches-select"]',
+    '[data-qa-selector="branches_select"]',
+    '.ref-selector .gl-new-dropdown-button-text',
+    '.js-project-refs-dropdown',
+  ];
+  for (const sel of refSelectors) {
+    const el = document.querySelector(sel);
+    if (el) {
+      const ref = el.textContent.trim();
+      if (ref && refAndFile.startsWith(ref + '/')) {
+        console.log(`[GitLab RefLinks] Ref from selector '${sel}': ${ref}`);
+        return { project, ref };
+      }
+    }
+  }
+
+  // Strategy 2: Find ALL elements that might contain the branch name
+  // The branch switcher button usually contains only the branch name
+  const allDropdownTexts = document.querySelectorAll('.gl-new-dropdown-button-text');
+  for (const el of allDropdownTexts) {
+    const ref = el.textContent.trim();
+    if (ref && refAndFile.startsWith(ref + '/')) {
+      console.log(`[GitLab RefLinks] Ref from dropdown text: ${ref}`);
+      return { project, ref };
+    }
+  }
+
+  // Strategy 3: Use the file name to determine ref
+  // Find the LONGEST possible ref (branch names can contain /)
   const fileNameEl = document.querySelector('[data-testid="file-title-content"]');
-  let fileName = null;
   if (fileNameEl) {
-    fileName = fileNameEl.textContent.trim();
+    const fileName = fileNameEl.textContent.trim();
+    if (fileName && refAndFile.endsWith(fileName)) {
+      const parts = refAndFile.split('/');
+      let bestRef = null;
+      // Try progressively LONGER refs — pick the longest that still ends with filename
+      for (let i = parts.length - 1; i >= 1; i--) {
+        const candidateFile = parts.slice(i).join('/');
+        if (candidateFile.endsWith(fileName)) {
+          bestRef = parts.slice(0, i).join('/');
+          // Don't break — keep going to find longer refs
+        }
+      }
+      if (bestRef) {
+        console.log(`[GitLab RefLinks] Ref from filename fallback: ${bestRef}`);
+        return { project, ref: bestRef };
+      }
+    }
   }
 
-  if (fileName && refAndFile.endsWith(fileName)) {
-    // ref = everything before the file name
-    const ref = refAndFile.slice(0, refAndFile.length - fileName.length - 1); // -1 for the "/"
-    return { project, ref };
-  }
-
-  // Fallback: assume file name is the last path segment
+  // Last fallback
   const lastSlash = refAndFile.lastIndexOf('/');
   if (lastSlash > 0) {
     return { project, ref: refAndFile.substring(0, lastSlash) };
@@ -98,14 +136,22 @@ function makeIncludesClickable() {
 
     if (!inIncludeBlock) return;
 
-    // Match project: "path" or project: *anchor
-    const projectMatch = text.match(/project:\s*(?:"([^"]+)"|(\*\w+))/);
+    // Match local: 'path/to/file.yml' (same project & branch)
+    const localMatch = text.match(/local:\s*["']?([^\s"']+\.ya?ml)["']?/);
+    if (localMatch && currentRepo) {
+      linkFileName(line, localMatch[1], currentRepo.project, currentRepo.ref);
+      return;
+    }
+
+    // Match project: "path" or project: path or project: *anchor
+    const projectMatch = text.match(/project:\s*(?:"([^"]+)"|'([^']+)'|(\*\w+)|([\w\-\.\/]+))/);
     if (projectMatch) {
       inSimpleInclude = false; // no longer simple includes
-      if (projectMatch[1]) {
-        currentProject = projectMatch[1];
-      } else if (projectMatch[2]) {
-        const anchorName = projectMatch[2].substring(1);
+      const value = projectMatch[1] || projectMatch[2] || projectMatch[4];
+      if (value) {
+        currentProject = value;
+      } else if (projectMatch[3]) {
+        const anchorName = projectMatch[3].substring(1);
         currentProject = anchors[anchorName] || null;
       }
       currentRef = null;
@@ -126,7 +172,8 @@ function makeIncludesClickable() {
     }
 
     // Match file: as a single value or start of a list
-    const fileSingleMatch = text.match(/file:\s+"?([^\s"]+\.ya?ml)"?/);
+    // Match file: as a single value or start of a list
+    const fileSingleMatch = text.match(/file:\s+["']?([^\s"']+\.ya?ml)["']?/);
     const fileListStart = text.match(/^\s*file:\s*$/);
 
     if (fileSingleMatch && currentProject && currentRef) {
@@ -140,6 +187,7 @@ function makeIncludesClickable() {
     }
 
     // Match list items: - "filename.yml" or - 'filename.yml' or - filename.yml
+    // Supports paths like pipelines/main.yml
     const fileListItem = text.match(/^\s*-\s+["']?([^\s"']+\.ya?ml)["']?/);
 
     if (inFileList && fileListItem && currentProject && currentRef) {
