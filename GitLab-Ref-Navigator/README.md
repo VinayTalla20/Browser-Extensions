@@ -102,10 +102,129 @@ include:
 ## 📂 Project Structure
 
 ```
-├── manifest.json        # Extension configuration
-├── contentScript.js     # Core logic — parses YAML and creates links
-└── README.md            # You are here
+├── manifest.json        # Extension configuration (Manifest V3)
+├── contentScript.js     # Core logic — parses YAML and creates clickable links
+└── README.md            # Documentation
 ```
+
+### How It Works Under the Hood
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  GitLab.com - .gitlab-ci.yml file view                  │
+│                                                         │
+│  1. Content script is injected (document_idle)          │
+│  2. MutationObserver waits for code block to render     │
+│  3. Parses YAML anchors (&anchor / *anchor)             │
+│  4. Scans each line for include patterns:               │
+│     • project: + ref: + file:                           │
+│     • local: 'path/to/file.yml'                         │
+│     • - 'simple_include.yml'                            │
+│  5. Wraps file names in <a> tags with correct URLs      │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Key Files Explained
+
+#### `manifest.json`
+Defines the extension metadata and configuration:
+- **`content_scripts`** — Injects `contentScript.js` on all `https://gitlab.com/*` pages at `document_idle`.
+- **`host_permissions`** — Grants access to GitLab.com only.
+- No `background.js` or `popup.html` needed — the extension is fully content-script driven.
+
+#### `contentScript.js`
+The core logic, broken into these functions:
+
+| Function | Purpose |
+|---|---|
+| `isGitlabYamlPage()` | Checks if the current page is a `.yml` / `.yaml` file on GitLab |
+| `getCurrentRepoInfo()` | Extracts the current project path and branch/tag from the page URL and DOM |
+| `makeIncludesClickable()` | Parses YAML lines, resolves anchors, and identifies `include` entries |
+| `linkFileName()` | Wraps a file name in a clickable `<a>` tag pointing to the correct GitLab URL |
+| `waitForCodeAndRun()` | Uses `MutationObserver` to wait for lazy-loaded code blocks |
+
+---
+
+## 🧑‍💻 Developer Guide
+
+### Prerequisites
+- A Chromium-based browser (Chrome, Edge, Brave)
+- Basic knowledge of JavaScript and Chrome Extensions (Manifest V3)
+
+### Local Development
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/VinayTalla20/Browser-Extensions.git
+   cd Browser-Extensions/GitLab-Ref-Navigator
+   ```
+
+2. **Load the extension:**
+   - Open `chrome://extensions/` (or `edge://extensions/`)
+   - Enable **Developer mode**
+   - Click **Load unpacked** → select the `GitLab-Ref-Navigator` folder
+
+3. **Make changes:**
+   - Edit `contentScript.js` in your editor
+   - Go to `chrome://extensions/` and click the **reload** button (↻) on the extension
+   - Refresh the GitLab page to test your changes
+
+4. **Debug:**
+   - Open DevTools on any GitLab YAML page → **Console** tab
+   - All logs are prefixed with `[GitLab RefLinks]` for easy filtering
+   - Use the **Elements** tab to inspect the DOM structure of GitLab's code viewer
+
+### Adding a New Include Format
+
+To support a new `include` pattern (e.g., `template:`), follow these steps:
+
+1. **Open a GitLab page** with the new format and inspect the DOM to understand the HTML structure.
+
+2. **Add a regex match** in `makeIncludesClickable()` inside the `codeLines.forEach()` loop:
+   ```js
+   // Match template: 'Jobs/Build.gitlab-ci.yml'
+   const templateMatch = text.match(/template:\s*["']?([^\s"']+\.ya?ml)["']?/);
+   if (templateMatch) {
+     // template includes use a GitLab-hosted URL
+     const tmplUrl = `https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/${templateMatch[1]}`;
+     linkFileName(line, templateMatch[1], 'gitlab-org/gitlab', 'master');
+     return;
+   }
+   ```
+
+3. **Reload the extension** and test on a GitLab page with the new format.
+
+### Architecture Decisions
+
+| Decision | Reason |
+|---|---|
+| **No `background.js`** | The extension only needs to act on page content — no browser-level events needed |
+| **No `popup.html`** | The extension works automatically — no user interaction required |
+| **No dependencies** | Pure vanilla JS keeps the extension lightweight and fast |
+| **`MutationObserver`** | GitLab lazy-loads code blocks via JavaScript; we must wait for the DOM to update |
+| **Content script only** | Simplest architecture — one file does everything |
+| **`document_idle`** | Runs after the page has finished loading, reducing interference with GitLab's own scripts |
+
+### Extending to Self-Hosted GitLab
+
+To support self-hosted GitLab instances, you would need to:
+
+1. Add a `background.js` service worker to dynamically register content scripts:
+   ```js
+   // background.js
+   chrome.scripting.registerContentScripts([{
+     id: 'gitlab-custom',
+     matches: ['https://gitlab.mycompany.com/*'],
+     js: ['contentScript.js'],
+     runAt: 'document_idle'
+   }]);
+   ```
+
+2. Add `"scripting"` and `"storage"` to `permissions` in `manifest.json`.
+
+3. Add a popup or options page where users can configure their GitLab instance URL.
+
+4. Update `host_permissions` to include the custom domain, or use the `"activeTab"` permission.
 
 ---
 
@@ -151,7 +270,22 @@ include:
 
 ## 🤝 Contributing
 
-Contributions are welcome! Feel free to open an issue or submit a pull request.
+Contributions are welcome! Here's how you can help:
+
+1. **Fork** the repository
+2. **Create a branch** (`git checkout -b feature/my-feature`)
+3. **Make your changes** and test locally
+4. **Commit** (`git commit -m 'feat: add my feature'`)
+5. **Push** (`git push origin feature/my-feature`)
+6. **Open a Pull Request**
+
+### Ideas for Contributions
+- 🎨 Design an extension icon
+- 🏢 Add support for self-hosted GitLab instances
+- 📦 Add support for `template:` includes
+- 🧪 Add automated tests
+- 🌐 Publish to Chrome Web Store / Firefox Add-ons
+- 📖 Improve documentation
 
 ---
 
