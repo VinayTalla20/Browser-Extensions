@@ -20,8 +20,10 @@ No more copy-pasting project paths and hunting for files — just **click and na
 | 📁 **Simple includes** | `- 'image_versions.yml'` → links to the file in the same repo & branch |
 | 📦 **Cross-project includes** | `project:` + `ref:` + `file:` → links to the exact file in the referenced repo |
 | 📋 **File lists** | Supports `file:` as a list with multiple entries |
+| 📂 **Local includes** | `local: 'pipelines/common.yml'` → links to the file in the same repo & branch |
 | ⚓ **YAML anchors** | Resolves `&anchor` / `*anchor` for `project` and `ref` values |
 | 🌿 **Branch-aware** | Correctly handles refs with `/` (e.g., `rc/0.2454.0`, `feature/my-branch`) |
+| 📝 **Unquoted values** | Supports `project: myorg/repo` without quotes |
 | ⏳ **Lazy-load support** | Waits for GitLab's code block to render before processing |
 
 ---
@@ -61,6 +63,24 @@ include:
 ```
 → Resolves anchors and links **each file** to the correct project and branch.
 
+### Local includes (same repo & branch)
+```yaml
+include:
+  - local: 'pipelines/jobs/terraform.yml'
+  - local: 'pipelines/common.yml'
+```
+→ Links to files in the **current project and branch**, using the full path from the project root.
+
+### Unquoted project values
+```yaml
+include:
+  - project: myorg/devops/seed/app
+    ref: main
+    file:
+      - pipelines/main.yml
+```
+→ Works with or without quotes around `project`, `ref`, and `file` values.
+
 ---
 
 ## 🛠️ Installation
@@ -84,9 +104,6 @@ include:
 ```
 ├── manifest.json        # Extension configuration
 ├── contentScript.js     # Core logic — parses YAML and creates links
-├── background.js        # Service worker (placeholder)
-├── popup.html           # Extension popup UI
-├── popup.js             # Popup logic
 └── README.md            # You are here
 ```
 
@@ -118,7 +135,13 @@ include:
 
 ## 🗺️ Roadmap
 
-- [ ] Support for `local:` includes
+- [x] Cross-project includes (`project` + `ref` + `file`)
+- [x] Simple includes (`- 'file.yml'`)
+- [x] Local includes (`local: 'path/to/file.yml'`)
+- [x] YAML anchor resolution (`&anchor` / `*anchor`)
+- [x] File lists under `file:`
+- [x] Branch names with `/` (e.g., `feature/my-branch`, `rc/0.2454.0`)
+- [x] Unquoted / single-quoted / double-quoted values
 - [ ] Support for `template:` includes
 - [ ] Icon and branding
 - [ ] Chrome Web Store / Firefox Add-ons publishing
