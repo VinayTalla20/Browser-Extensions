@@ -2,6 +2,14 @@
 
 > **v1.0.0** — A browser extension that makes `include` file references in GitLab CI YAML files clickable.
 
+<p align="center">
+  <img src="demo.gif" alt="GitLab Ref Navigator Demo" width="720">
+</p>
+
+<p align="center">
+  <a href="https://htmlpreview.github.io/?https://github.com/VinayTalla20/Browser-Extensions/blob/master/GitLab-Ref-Navigator/demo.html">🌐 View Interactive Demo</a>
+</p>
+
 ---
 
 ## 🚀 What It Does
@@ -106,6 +114,8 @@ include:
 ```
 ├── manifest.json        # Extension configuration (Manifest V3)
 ├── contentScript.js     # Core logic — parses YAML and creates clickable links
+├── demo.gif             # Demo GIF showing the extension in action
+├── demo.html            # Interactive visual demo page
 └── README.md            # Documentation
 ```
 
