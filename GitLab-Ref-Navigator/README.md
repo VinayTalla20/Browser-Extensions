@@ -250,6 +250,69 @@ To support self-hosted GitLab instances, you would need to:
 
 ---
 
+## 🐛 Troubleshooting
+
+### Links not appearing on the page
+
+| Problem | Solution |
+|---|---|
+| **Links don't appear after page load** | Refresh the page (`Ctrl+R` / `Cmd+R`). GitLab lazy-loads content and sometimes the observer misses the initial render. |
+| **Links stopped working after code changes** | Go to `chrome://extensions/` → click the **reload** button (↻) on the extension → then refresh the GitLab page. Always reload the extension after editing `contentScript.js` or `manifest.json`. |
+| **Extension not running at all** | Check that Developer mode is enabled and the extension is loaded. Look for errors on `chrome://extensions/`. |
+| **No console logs from the extension** | Verify the page URL ends with `.yml` or `.yaml`. The extension only runs on YAML file views (`/blob/.../*.yml`). |
+| **Links appear but point to wrong URL** | Check the console logs for `[GitLab RefLinks] Current repo:` — verify the project and ref are correct. Branch names with `/` can sometimes be tricky. |
+
+### Common issues
+
+<details>
+<summary><strong>Console shows "Found 0 code lines"</strong></summary>
+
+GitLab hasn't finished rendering the code block yet. The extension uses a `MutationObserver` to wait, but on very slow connections it may time out. **Fix:** Refresh the page.
+</details>
+
+<details>
+<summary><strong>Console shows "Timed out waiting for code block"</strong></summary>
+
+The code block took longer than 30 seconds to render. This can happen on very large files or slow networks. **Fix:** Refresh the page once the content is visible.
+</details>
+
+<details>
+<summary><strong>Links appear on some includes but not others</strong></summary>
+
+Check if the missing includes use an unsupported format:
+- ❌ `template:` includes are not yet supported
+- ❌ `component:` includes are not yet supported
+- ✅ `project:` + `ref:` + `file:` — supported
+- ✅ `local:` — supported
+- ✅ Simple list (`- 'file.yml'`) — supported
+
+Also check if `project:` or `ref:` values use an anchor (`*anchor`) — the anchor must be defined with `&anchor` earlier in the same file.
+</details>
+
+<details>
+<summary><strong>Links work on one page but not after navigating to another file</strong></summary>
+
+GitLab uses client-side navigation (Turbo/PJAX). The extension watches for URL changes, but in rare cases it may not detect the navigation. **Fix:** Refresh the page.
+</details>
+
+<details>
+<summary><strong>Extension doesn't work on self-hosted GitLab</strong></summary>
+
+The extension currently only supports `gitlab.com`. Self-hosted GitLab support is on the roadmap. See the [Extending to Self-Hosted GitLab](#extending-to-self-hosted-gitlab) section for guidance on adding it yourself.
+</details>
+
+### How to report a bug
+
+1. Open DevTools → **Console** tab on the affected page.
+2. Filter logs by `[GitLab RefLinks]`.
+3. Copy all the relevant log lines.
+4. [Open an issue](https://github.com/VinayTalla20/Browser-Extensions/issues/new) with:
+   - The YAML snippet that isn't working
+   - The console logs
+   - Your browser name and version
+
+---
+
 ## ⚙️ Tech Stack
 
 - **Manifest V3** (Chrome Extensions)
