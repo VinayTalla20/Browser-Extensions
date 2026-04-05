@@ -39,9 +39,9 @@ include:
 ### Cross-project includes
 ```yaml
 include:
-  - project: "inspire1/infra/pipelines"
+  - project: "myorg/devops/pipelines"
     ref: master
-    file: pipeline_build_dns_syncer.yml
+    file: pipeline_build_app.yml
 ```
 → Links to the file in the **specified project and branch**.
 
@@ -49,7 +49,7 @@ include:
 ```yaml
 variables:
   SCRIPTS_BRANCH: &modules_version rc/0.2454.0
-  MODULES_PROJECT: &modules_project inspire1/infra/pipeline-modules
+  MODULES_PROJECT: &modules_project myorg/devops/pipeline-modules
 
 include:
   - project: *modules_project
@@ -74,7 +74,7 @@ include:
    - **Brave**: `brave://extensions/`
 3. Enable **Developer mode** (toggle in the top-right corner).
 4. Click **Load unpacked**.
-5. Select the `ColorSwap` folder (the one containing `manifest.json`).
+5. Select the `GitLab-Ref-Navigator` folder (the one containing `manifest.json`).
 6. Navigate to any `.yml` or `.yaml` file on GitLab.com — file references will be clickable!
 
 ---
